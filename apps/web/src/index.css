@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --canvas: 253 252 250; /* #FDFCFA — branco quente, nunca #FFF */
+    --surface: 255 255 255;
+    --raised: 248 246 242;
+    --ink: 43 40 36; /* #2B2824 */
+    --muted: 138 131 120; /* #8A8378 */
+    --line: 232 227 219;
+    --shadow: 62 52 38; /* sombra quente: sombra cinza sobre fundo quente suja */
+
+    --amber: 201 162 39; /* #C9A227 */
+    --amber-soft: 250 244 226;
+    --amber-ink: 122 96 14;
+
+    --sage: 122 155 118; /* #7A9B76 */
+    --sage-soft: 236 242 234;
+    --sage-ink: 62 88 59;
+
+    --terra: 201 125 96; /* #C97D60 */
+    --terra-soft: 250 238 232;
+    --terra-ink: 133 71 47;
+
+    --sky: 168 197 214; /* #A8C5D6 */
+    --sky-soft: 238 244 248;
+    --sky-ink: 61 96 116;
+
+    color-scheme: light;
+  }
+
+  /* Dark mode não é o light invertido: é um tema noturno próprio, de baixa
+     luminância e ainda quente. Alguém vai abrir isso às 3h com o bebê no colo
+     e a tela a 15cm do rosto — cinza-azulado frio aqui é agressivo. */
+  .dark {
+    --canvas: 26 24 21;
+    --surface: 35 32 27;
+    --raised: 44 40 34;
+    --ink: 240 235 227;
+    --muted: 156 148 138;
+    --line: 58 53 46;
+    --shadow: 0 0 0;
+
+    --amber: 214 179 74;
+    --amber-soft: 58 48 22;
+    --amber-ink: 232 205 130;
+
+    --sage: 141 174 137;
+    --sage-soft: 40 51 39;
+    --sage-ink: 178 205 174;
+
+    --terra: 216 146 118;
+    --terra-soft: 60 41 33;
+    --terra-ink: 232 182 161;
+
+    --sky: 154 187 208;
+    --sky-soft: 35 47 55;
+    --sky-ink: 178 206 222;
+
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans text-16 antialiased;
+    /* Respeita o notch/home indicator — o app é instalável e roda fullscreen. */
+    padding-top: env(safe-area-inset-top);
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-medium text-ink;
+  }
+
+  /* Foco visível e consistente. O painel do profissional é navegado por teclado
+     e um outline padrão de browser sobre o fundo quente fica ilegível. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-amber/70 ring-offset-2 ring-offset-canvas rounded-lg;
+  }
+
+  ::selection {
+    @apply bg-amber/20;
+  }
+
+  /* Quem pediu menos movimento recebe menos movimento — inclusive nas
+     animações de "draw-in" do gráfico, que são puro enfeite para essa pessoa. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface rounded-card shadow-rest border border-line/60;
+  }
+
+  /* Glassmorphism "extremamente discreto": 6px de blur e 70% de opacidade.
+     Só aparece na tab bar e nos overlays de câmera, onde há conteúdo passando
+     por baixo. Em card estático seria enfeite. */
+  .glass {
+    @apply bg-surface/70 backdrop-blur-md border border-line/50;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden bg-raised rounded-lg;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--surface) / 0.65),
+      transparent
+    );
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* O relatório é a única tela que vira papel. Impressão sai SEMPRE no tema claro:
+   um PDF com fundo escuro queima meio cartucho da clínica e chega ilegível. */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  :root,
+  .dark {
+    --canvas: 255 255 255;
+    --surface: 255 255 255;
+    --raised: 248 246 242;
+    --ink: 26 24 21;
+    --muted: 110 104 96;
+    --line: 214 208 199;
+  }
+
+  body {
+    background: #fff;
+    padding-top: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-sheet {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  /* Uma seção partida no meio de duas folhas destrói a leitura da tabela. */
+  section,
+  tr {
+    break-inside: avoid;
+  }
+}

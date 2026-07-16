@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0"
+    />
+    <meta name="theme-color" content="#FDFCFA" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1A1815" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <!-- Fotos de bebê em tratamento não vão para índice de busca nenhum, em
+         hipótese alguma. Isto é uma segunda camada; a primeira é o backend
+         nunca servir imagem sem URL assinada. -->
+    <meta name="robots" content="noindex, nofollow, noarchive, noimageindex" />
+    <meta name="referrer" content="no-referrer" />
+
+    <title>SimetriApp — acompanhamento da cabecinha do seu bebê</title>
+    <meta
+      name="description"
+      content="Acompanhamento fotográfico semanal da simetria craniana. Ferramenta de acompanhamento visual complementar — não substitui avaliação profissional."
+    />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <script>
+      // Aplica o tema ANTES do primeiro paint. Sem isto, quem usa dark mode leva
+      // um flash branco na cara às 3 da manhã — exatamente o cenário de uso.
+      (function () {
+        try {
+          var stored = localStorage.getItem('simetriapp.theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = stored ? stored === 'dark' : prefersDark;
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
