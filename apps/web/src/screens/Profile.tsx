@@ -24,6 +24,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Switch } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
 import { DEMO_MODE, useApp } from '@/store/app';
+import { useSessao } from '@/store/sessao';
+import { NUVEM_ATIVA } from '@/lib/supabase';
 import { useTheme } from '@/store/theme';
 import { cn } from '@/lib/cn';
 
@@ -40,6 +42,7 @@ export function Profile() {
   const navigate = useNavigate();
   const { state, derived, updateNotificationPrefs, setSubscription, resetToDemo, wipeEverything, simulateTrialExpiry } =
     useApp();
+  const { sessao, sair } = useSessao();
   const { theme, toggle } = useTheme();
 
   const [confirmWipe, setConfirmWipe] = useState(false);
@@ -217,6 +220,15 @@ export function Profile() {
           As fotos do seu bebê são suas. Apagar a conta remove tudo de verdade — fotos, curva e
           anotações — inclusive do painel do profissional. Não é reversível e não guardamos cópia.
         </p>
+        {NUVEM_ATIVA && sessao && (
+          <p className="text-13 text-muted mt-3">
+            Você entrou como <strong className="text-ink">{sessao.user.email}</strong>.{' '}
+            <button type="button" onClick={() => void sair()} className="underline text-ink">
+              Sair deste aparelho
+            </button>
+          </p>
+        )}
+
         <Button variant="danger" size="sm" className="mt-4" onClick={() => setConfirmWipe(true)}>
           <Trash2 size={15} />
           Apagar meus dados

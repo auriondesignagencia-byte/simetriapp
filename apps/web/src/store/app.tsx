@@ -38,6 +38,9 @@ import {
 } from '@/lib/seed';
 import { generateHeadPhoto } from '@/lib/demoAssets';
 import { apagarEstado, carregarEstado, salvarEstado } from '@/lib/persistencia';
+import { baixarEstado, subirEstado } from '@/lib/nuvem';
+import { NUVEM_ATIVA } from '@/lib/supabase';
+import { useSessao } from './sessao';
 
 // Modo demonstração: OPT-IN. Antes o padrão era ligado (`!== 'false'`), e com
 // isso a build de produção subia em modo demo — quem abria o app pela primeira
@@ -144,8 +147,11 @@ export interface Derived {
 const Ctx = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { sessao } = useSessao();
+  const userId = sessao?.user.id ?? null;
+
   const [state, setState] = useState<AppState>(EMPTY);
-  // O IndexedDB é assíncrono: até ele responder não dá para saber se existe
+  // O armazenamento é assíncrono: até ele responder não dá para saber se existe
   // histórico salvo. Renderizar antes disso mandaria quem já usa o app direto
   // para o onboarding.
   const [hidratado, setHidratado] = useState(false);
@@ -153,25 +159,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelado = false;
+    setHidratado(false);
+
     (async () => {
-      const salvo = await carregarEstado<AppState>();
+      const local = await carregarEstado<AppState>();
+
+      // Com conta, a nuvem é a fonte da verdade: é ela que faz o histórico
+      // sobreviver à troca de aparelho. O que está no aparelho vira cache.
+      if (userId) {
+        const daNuvem = await baixarEstado<AppState>(userId);
+        if (cancelado) return;
+
+        if (daNuvem) {
+          setState(comCatalogoAtual(daNuvem));
+        } else if (local?.onboarded) {
+          // Primeira entrada com conta em um aparelho que já tinha histórico:
+          // sobe o que existe em vez de descartar.
+          setState(comCatalogoAtual(local));
+          void subirEstado(userId, local);
+        } else if (DEMO_MODE) {
+          setState(demoState());
+        }
+        setHidratado(true);
+        return;
+      }
+
       if (cancelado) return;
-      if (salvo) setState(comCatalogoAtual(salvo));
+      if (local) setState(comCatalogoAtual(local));
       // Em modo demo, sem nada salvo, o app já nasce populado — é o requisito de
       // "ver o produto completo sem tirar foto nenhuma".
       else if (DEMO_MODE) setState(demoState());
       setHidratado(true);
     })();
+
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     // Antes de hidratar, gravar sobrescreveria o histórico com o estado vazio.
     if (!hidratado) return;
+
+    // O aparelho grava na hora: é o que garante o app funcionando sem rede.
     void salvarEstado(state).then((ok) => setFalhaAoSalvar(!ok));
-  }, [state, hidratado]);
+
+    if (!userId) return;
+    // A nuvem espera a digitação parar. Sem isso, cada tecla no campo de nota
+    // viraria uma gravação — e um upload de foto junto.
+    const janela = setTimeout(() => void subirEstado(userId, state), 1200);
+    return () => clearTimeout(janela);
+  }, [state, hidratado, userId]);
 
   const track = useCallback((event: AnalyticsEvent, meta?: Record<string, unknown>) => {
     setState((s) => ({
