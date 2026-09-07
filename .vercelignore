@@ -1,0 +1,14 @@
+# O que NÃO sobe para a Vercel. Sem este arquivo o CLI cai no .gitignore.
+node_modules
+.git
+dist
+dev-dist
+apps/api
+*.log
+
+# Variáveis locais nunca sobem: o `vercel --prod` envia os arquivos da pasta, e
+# um .env com VITE_DEMO_MODE=true faria a build de produção subir em modo
+# demonstração, com o bebê fictício no lugar do onboarding do cliente.
+.env
+.env.*
+!.env.example

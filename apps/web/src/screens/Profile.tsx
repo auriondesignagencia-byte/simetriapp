@@ -78,62 +78,18 @@ export function Profile() {
         </div>
       </Card>
 
-      {/* Assinatura ------------------------------------------------------- */}
-      <Card tone={derived.hasAccess ? 'plain' : 'amber'}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardLabel>Assinatura</CardLabel>
-            <p className="text-16 font-medium text-ink mt-1">{statusCopy.label}</p>
-          </div>
-          <Badge tone={statusCopy.tone}>
-            <Crown size={12} />
-            {subscription?.plan === 'premium' ? 'Premium' : 'Free'}
-          </Badge>
-        </div>
-
-        {status === 'trialing' && derived.trialDaysLeft !== null && (
-          <p className="text-14 text-muted mt-2 leading-relaxed">
-            {derived.trialDaysLeft === 0
-              ? 'Seu teste termina hoje. Nenhuma cobrança acontece sem você autorizar.'
-              : `Faltam ${derived.trialDaysLeft} dia${derived.trialDaysLeft === 1 ? '' : 's'} de teste. Não pedimos cartão para começar.`}
-          </p>
-        )}
-
-        {status === 'active' && subscription?.currentPeriodEnd && (
-          <p className="text-14 text-muted mt-2 leading-relaxed">
-            {subscription.cancelAtPeriodEnd
-              ? `Acesso garantido até ${formatDateBR(subscription.currentPeriodEnd)}. Depois disso, a assinatura não renova.`
-              : `Próxima renovação em ${formatDateBR(subscription.currentPeriodEnd)}.`}
-          </p>
-        )}
-
-        {!derived.hasAccess && (
-          <p className="text-14 text-amber-ink/80 mt-2 leading-relaxed">
-            Suas fotos e sua curva continuam salvas. Reative quando quiser.
-          </p>
-        )}
-
-        <div className="flex gap-2 mt-4">
-          {derived.hasAccess ? (
-            subscription?.cancelAtPeriodEnd ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setSubscription({ cancelAtPeriodEnd: false })}
-              >
-                Voltar a renovar
-              </Button>
-            ) : (
-              <Button variant="ghost" size="sm" onClick={() => setConfirmCancel(true)}>
-                Cancelar assinatura
-              </Button>
-            )
-          ) : (
-            <Button size="sm" onClick={() => navigate('/paywall?from=perfil')}>
-              Ver o Premium
-            </Button>
-          )}
-        </div>
+      {/* Acesso -----------------------------------------------------------
+          A assinatura é gerenciada no checkout externo (Cakto), não aqui. Os
+          botões antigos — "Assinar o Premium" e "Cancelar assinatura" — mudavam
+          só o estado local: quem clicasse em cancelar continuaria sendo cobrado,
+          e quem clicasse em assinar ganharia acesso sem pagar. */}
+      <Card>
+        <CardLabel>Seu acesso</CardLabel>
+        <p className="text-16 font-medium text-ink mt-1">Ativo</p>
+        <p className="text-14 text-muted mt-2 leading-relaxed">
+          A assinatura é gerenciada pelo e-mail da sua compra. Para trocar o plano ou
+          cancelar, use o link que você recebeu ao assinar.
+        </p>
       </Card>
 
       {/* Profissional ----------------------------------------------------- */}

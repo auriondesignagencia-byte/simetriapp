@@ -37,10 +37,13 @@ import {
   DEMO_USER,
 } from '@/lib/seed';
 import { generateHeadPhoto } from '@/lib/demoAssets';
+import { apagarEstado, carregarEstado, salvarEstado } from '@/lib/persistencia';
 
-export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== 'false';
-
-const STORAGE_KEY = 'simetriapp.state.v1';
+// Modo demonstração: OPT-IN. Antes o padrão era ligado (`!== 'false'`), e com
+// isso a build de produção subia em modo demo — quem abria o app pela primeira
+// vez via o bebê fictício, o histórico dele e os atalhos de apresentação, em vez
+// do próprio onboarding. Para demonstrar, rode com VITE_DEMO_MODE=true.
+export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 export interface AppState {
   onboarded: boolean;
@@ -86,23 +89,18 @@ function demoState(): AppState {
   };
 }
 
-function load(): AppState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as AppState;
-      // O catálogo de conteúdo vem sempre do código, nunca do localStorage —
-      // senão um usuário antigo fica preso na biblioteca da versão que instalou.
-      return { ...parsed, content: DEMO_CONTENT };
-    }
-  } catch {
-    /* storage corrompido não pode derrubar o app; cai no estado limpo */
-  }
-  return EMPTY;
+/**
+ * O catálogo de conteúdo vem sempre do código, nunca do que foi salvo — senão um
+ * usuário antigo fica preso na biblioteca da versão que instalou.
+ */
+function comCatalogoAtual(estado: AppState): AppState {
+  return { ...estado, content: DEMO_CONTENT };
 }
 
 interface AppContextValue {
   state: AppState;
+  /** true quando nem o IndexedDB nem o localStorage aceitaram gravar. */
+  falhaAoSalvar: boolean;
   derived: Derived;
   // ações
   completeOnboarding: (p: {
@@ -146,21 +144,34 @@ export interface Derived {
 const Ctx = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>(() => {
-    const loaded = load();
-    // Em modo demo, se ainda não há nada salvo, o app já nasce populado — é o
-    // requisito de "ver o produto completo sem tirar foto nenhuma".
-    if (DEMO_MODE && !loaded.onboarded) return demoState();
-    return loaded;
-  });
+  const [state, setState] = useState<AppState>(EMPTY);
+  // O IndexedDB é assíncrono: até ele responder não dá para saber se existe
+  // histórico salvo. Renderizar antes disso mandaria quem já usa o app direto
+  // para o onboarding.
+  const [hidratado, setHidratado] = useState(false);
+  const [falhaAoSalvar, setFalhaAoSalvar] = useState(false);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      /* quota cheia: o app continua funcionando em memória */
-    }
-  }, [state]);
+    let cancelado = false;
+    (async () => {
+      const salvo = await carregarEstado<AppState>();
+      if (cancelado) return;
+      if (salvo) setState(comCatalogoAtual(salvo));
+      // Em modo demo, sem nada salvo, o app já nasce populado — é o requisito de
+      // "ver o produto completo sem tirar foto nenhuma".
+      else if (DEMO_MODE) setState(demoState());
+      setHidratado(true);
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Antes de hidratar, gravar sobrescreveria o histórico com o estado vazio.
+    if (!hidratado) return;
+    void salvarEstado(state).then((ok) => setFalhaAoSalvar(!ok));
+  }, [state, hidratado]);
 
   const track = useCallback((event: AnalyticsEvent, meta?: Record<string, unknown>) => {
     setState((s) => ({
@@ -321,7 +332,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const wipeEverything = useCallback(() => {
     // Direito ao esquecimento: sai do storage de verdade, não vira flag.
-    localStorage.removeItem(STORAGE_KEY);
+    void apagarEstado();
     setState(EMPTY);
   }, []);
 
@@ -347,16 +358,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           )
         : null;
 
-    const inGrace = !!sub?.graceEndsAt && new Date(sub.graceEndsAt) > new Date();
-    const hasAccess =
-      sub?.status === 'active' ||
-      (sub?.status === 'trialing' && (trialDaysLeft ?? 0) > 0) ||
-      // Pagamento recusado não corta o acesso no mesmo dia: 3 dias de cortesia.
-      (sub?.status === 'past_due' && inGrace) ||
-      // Cancelou mas o período pago ainda corre — o acesso é dele, foi pago.
-      (sub?.status === 'canceled' &&
-        !!sub.currentPeriodEnd &&
-        new Date(sub.currentPeriodEnd) > new Date());
+    // Acesso sempre liberado dentro do app. A cobrança e o controle de acesso
+    // acontecem no checkout externo (Cakto): quem está com o app, já pagou ou
+    // está no período de teste. Não faz sentido cobrar de novo para abrir módulo.
+    const hasAccess = true;
 
     const sorted = [...state.entries].sort((a, b) => a.weekNumber - b.weekNumber);
     const latest = sorted.length ? sorted[sorted.length - 1] : null;
@@ -396,6 +401,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => ({
       state,
       derived,
+      falhaAoSalvar,
       completeOnboarding,
       addEntry,
       updateNotificationPrefs,
@@ -422,6 +428,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       simulateTrialExpiry,
     ],
   );
+
+  // Segura a primeira pintura até saber o que há salvo. São poucos milissegundos
+  // de leitura local; sem isso, quem já tem histórico veria o onboarding piscar
+  // antes de o app se dar conta de que ela não é uma usuária nova.
+  if (!hidratado) return null;
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

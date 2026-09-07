@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { matchRoutes, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './store/app';
 import { TabBar } from './components/TabBar';
 import { Onboarding } from './screens/Onboarding';
@@ -15,6 +15,22 @@ import { ProfessionalPanel } from './screens/ProfessionalPanel';
 
 /** Rotas onde a tab bar atrapalha: fluxos imersivos e de tela cheia. */
 const IMMERSIVE = ['/captura', '/onboarding', '/paywall', '/relatorio', '/profissional'];
+
+/**
+ * Rotas do shell. Lista única: alimenta o <Routes> e a checagem de rota
+ * desconhecida — assim as duas nunca saem de sincronia.
+ */
+const SHELL_ROUTES = [
+  { path: '/onboarding', element: <Onboarding /> },
+  { path: '/', element: <Home /> },
+  { path: '/captura', element: <Capture /> },
+  { path: '/evolucao', element: <Evolution /> },
+  { path: '/biblioteca', element: <Library /> },
+  { path: '/biblioteca/:id', element: <Library /> },
+  { path: '/perfil', element: <Profile /> },
+  { path: '/notificacoes', element: <Notifications /> },
+  { path: '/paywall', element: <Paywall /> },
+];
 
 export function App() {
   const location = useLocation();
@@ -46,6 +62,15 @@ export function App() {
     return <Navigate to="/onboarding" replace />;
   }
 
+  // Rota desconhecida (link antigo, erro de digitação, atalho do PWA que mudou):
+  // redireciona ANTES de entrar no AnimatePresence. Com o <Navigate> lá dentro,
+  // a troca de `key` no mesmo ciclo travava o modo "wait" e a tela seguinte nunca
+  // montava — o app abria em branco, com só a tab bar, e nem clicar em Início
+  // resolvia.
+  if (!matchRoutes(SHELL_ROUTES, location)) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <div className="min-h-dvh bg-canvas">
       <div className="mx-auto w-full max-w-[520px] min-h-dvh relative">
@@ -59,16 +84,9 @@ export function App() {
             className={immersive ? '' : 'pb-24'}
           >
             <Routes location={location}>
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/" element={<Home />} />
-              <Route path="/captura" element={<Capture />} />
-              <Route path="/evolucao" element={<Evolution />} />
-              <Route path="/biblioteca" element={<Library />} />
-              <Route path="/biblioteca/:id" element={<Library />} />
-              <Route path="/perfil" element={<Profile />} />
-              <Route path="/notificacoes" element={<Notifications />} />
-              <Route path="/paywall" element={<Paywall />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              {SHELL_ROUTES.map((route) => (
+                <Route key={route.path} path={route.path} element={route.element} />
+              ))}
             </Routes>
           </motion.main>
         </AnimatePresence>
