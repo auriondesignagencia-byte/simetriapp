@@ -68,6 +68,19 @@ create policy "dono apaga o próprio estado"
   on public.estado_app for delete
   using (auth.uid() = user_id);
 
+-- Permissões da API. O projeto foi criado com "expor automaticamente novas
+-- tabelas" DESLIGADO (recomendação do próprio Supabase), então cada tabela
+-- precisa ser liberada de propósito. Só o usuário autenticado entra aqui;
+-- `anon` não recebe nada além da função de checagem acima.
+grant select, insert, update, delete on public.estado_app to authenticated;
+
+-- Reforço: o role anônimo não precisa tocar nestas tabelas. A RLS já bloqueia
+-- as linhas (uma consulta anônima volta vazia), mas revogar o privilégio faz a
+-- resposta ser um erro de permissão em vez de uma lista vazia — uma camada a
+-- menos de superfície exposta.
+revoke all on public.acessos_liberados from anon;
+revoke all on public.estado_app from anon;
+
 -- 3. FOTOS -------------------------------------------------------------------
 -- Bucket privado: nada é servido por URL pública. O app pede uma URL assinada,
 -- válida por uma hora, toda vez que precisa exibir.

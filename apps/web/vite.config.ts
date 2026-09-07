@@ -4,6 +4,10 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
 export default defineConfig({
+  // O .env fica na raiz do monorepo, não em apps/web. Sem isto o Vite procura
+  // ao lado deste arquivo, não acha nada, e o app sobe sem as chaves do
+  // Supabase — silenciosamente, como se a nuvem não estivesse configurada.
+  envDir: path.resolve(__dirname, '../..'),
   plugins: [
     react(),
     VitePWA({
