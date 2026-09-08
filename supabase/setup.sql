@@ -45,6 +45,7 @@ alter table public.estado_app enable row level security;
 
 -- Cada um só enxerga a própria linha — e só se o e-mail continuar liberado.
 -- Assim, tirar alguém da lista corta o acesso aos dados, não só ao login.
+drop policy if exists "dono lê o próprio estado" on public.estado_app;
 create policy "dono lê o próprio estado"
   on public.estado_app for select
   using (
@@ -52,6 +53,7 @@ create policy "dono lê o próprio estado"
     and public.email_liberado(auth.jwt() ->> 'email')
   );
 
+drop policy if exists "dono cria o próprio estado" on public.estado_app;
 create policy "dono cria o próprio estado"
   on public.estado_app for insert
   with check (
@@ -59,11 +61,13 @@ create policy "dono cria o próprio estado"
     and public.email_liberado(auth.jwt() ->> 'email')
   );
 
+drop policy if exists "dono atualiza o próprio estado" on public.estado_app;
 create policy "dono atualiza o próprio estado"
   on public.estado_app for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop policy if exists "dono apaga o próprio estado" on public.estado_app;
 create policy "dono apaga o próprio estado"
   on public.estado_app for delete
   using (auth.uid() = user_id);
@@ -89,14 +93,17 @@ values ('fotos', 'fotos', false)
 on conflict (id) do nothing;
 
 -- Cada usuário só mexe na própria pasta. O caminho é sempre "<user_id>/arquivo".
+drop policy if exists "dono lê as próprias fotos" on storage.objects;
 create policy "dono lê as próprias fotos"
   on storage.objects for select
   using (bucket_id = 'fotos' and (storage.foldername(name))[1] = auth.uid()::text);
 
+drop policy if exists "dono envia as próprias fotos" on storage.objects;
 create policy "dono envia as próprias fotos"
   on storage.objects for insert
   with check (bucket_id = 'fotos' and (storage.foldername(name))[1] = auth.uid()::text);
 
+drop policy if exists "dono apaga as próprias fotos" on storage.objects;
 create policy "dono apaga as próprias fotos"
   on storage.objects for delete
   using (bucket_id = 'fotos' and (storage.foldername(name))[1] = auth.uid()::text);
