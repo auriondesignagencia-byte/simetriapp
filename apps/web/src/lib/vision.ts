@@ -176,3 +176,44 @@ export async function compressImage(canvas: HTMLCanvasElement, maxSize = 1024): 
   out.getContext('2d')!.drawImage(canvas, 0, 0, out.width, out.height);
   return out.toDataURL('image/jpeg', 0.82);
 }
+
+/**
+ * Carrega uma foto escolhida pelo usuário num canvas quadrado, do mesmo jeito
+ * que a câmera faz (recorte central).
+ *
+ * Existe porque a câmera falha em casos que NÃO são exceção no público deste
+ * app: permissão negada, navegador embutido de Instagram/Facebook (que é por
+ * onde chega o tráfego de anúncio) e desktop sem webcam. Sem isto a única
+ * saída era a foto simulada — ou seja, um registro inventado indo parar no
+ * histórico, no índice e no relatório de uma mãe.
+ */
+export async function canvasFromFile(file: File): Promise<HTMLCanvasElement> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('imagem ilegível'));
+      el.src = url;
+    });
+
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = side;
+    canvas.height = side;
+    canvas.getContext('2d')!.drawImage(
+      img,
+      (img.naturalWidth - side) / 2,
+      (img.naturalHeight - side) / 2,
+      side,
+      side,
+      0,
+      0,
+      side,
+      side,
+    );
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

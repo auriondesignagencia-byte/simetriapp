@@ -38,9 +38,11 @@ export const babySchema = z.object({
     ),
   birthWeightG: z
     .number()
-    .int()
-    .min(300, 'Peso parece baixo demais — confira.')
-    .max(7000, 'Peso parece alto demais — confira.')
+    // Sem mensagem, o `.int()` devolvia o texto padrão do Zod em inglês para
+    // quem digita o peso em quilos ("3,2") — que é o erro mais comum aqui.
+    .int('Use o peso em gramas, sem vírgula — 3240, não 3,24.')
+    .min(300, 'Peso parece baixo demais — confira. Em gramas, ex.: 3240.')
+    .max(7000, 'Peso parece alto demais — confira. Em gramas, ex.: 3240.')
     .nullable(),
   premature: z.boolean(),
   multiplePregnancy: z.boolean(),

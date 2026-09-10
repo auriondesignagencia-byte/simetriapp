@@ -5,6 +5,7 @@ import {
   Camera,
   Check,
   ImageOff,
+  ImagePlus,
   Plus,
   RotateCcw,
   Sparkles,
@@ -35,9 +36,10 @@ import { Disclaimer } from '@/components/ui/Disclaimer';
 import { IndexReadout } from '@/components/IndexReadout';
 import { PointEditor } from '@/components/PointEditor';
 import { GhostCompare } from '@/components/GhostCompare';
-import { useApp, simulatedPhoto } from '@/store/app';
+import { useApp, simulatedPhoto, DEMO_MODE } from '@/store/app';
 import {
   assessQuality,
+  canvasFromFile,
   compressImage,
   detectBox,
   framingFor,
@@ -50,7 +52,15 @@ import {
 } from '@/lib/vision';
 import { cn } from '@/lib/cn';
 
-type Phase = 'checklist' | 'camera' | 'error' | 'compare' | 'points' | 'result' | 'angles';
+type Phase =
+  | 'checklist'
+  | 'camera'
+  | 'sem-camera'
+  | 'error'
+  | 'compare'
+  | 'points'
+  | 'result'
+  | 'angles';
 
 const CHECKS = [
   { key: 'luz', label: 'Ambiente bem iluminado', desc: 'Luz natural ajuda. Evite contraluz.' },
@@ -133,15 +143,15 @@ export function Capture() {
         </div>
       </header>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={phase}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-          className="flex-1 flex flex-col"
-        >
+      {/* Sem AnimatePresence de propósito.
+          Com `mode="wait"` + `key={phase}` o nó que saía terminava a animação
+          (opacity 0) mas NUNCA era removido do DOM: continuava ocupando o
+          layout e, como o modo "wait" espera a remoção, a fase seguinte não
+          entrava. O usuário tirava a foto e ficava olhando uma tela vazia —
+          o registro da semana morria ali. A entrada agora é uma animação CSS
+          (`animate-fade-up`, que já existe no tema), que não precisa
+          coreografar saída nenhuma para estar correta. */}
+      <div key={phase} className="flex-1 flex flex-col animate-fade-up">
           {phase === 'checklist' && (
             <div className="flex-1 flex flex-col px-5 pb-8">
               <p className="text-16 text-muted leading-relaxed mb-5">
@@ -181,7 +191,71 @@ export function Capture() {
           )}
 
           {phase === 'camera' && (
-            <CameraView onCaptured={handleCaptured} babyName={state.baby?.name ?? 'o bebê'} />
+            <CameraView
+              onCaptured={handleCaptured}
+              onDenied={() => setPhase('sem-camera')}
+              babyName={state.baby?.name ?? 'o bebê'}
+            />
+          )}
+
+          {/* Sem câmera é uma FASE, não um estado escondido dentro da câmera.
+              Enquanto era estado interno, a CameraView continuava montada depois
+              da foto: a saída do framer-motion terminava mas o nó nunca saía do
+              DOM, e com mode="wait" a fase seguinte nunca entrava — a tela
+              simplesmente ficava vazia e o registro da semana morria ali. */}
+          {phase === 'sem-camera' && (
+            <div className="flex-1 flex flex-col px-5 pb-8">
+              <Card tone="sky" className="text-center">
+                <span className="inline-grid place-items-center w-12 h-12 rounded-pill bg-sky/25 text-sky-ink mb-3">
+                  <Camera size={20} />
+                </span>
+                <h2 className="text-20 text-sky-ink mb-2">Sem acesso à câmera</h2>
+                <p className="text-14 text-sky-ink/85 leading-relaxed">
+                  Você pode liberar a câmera nas permissões do navegador, ou escolher uma foto que
+                  já tirou. Vale qualquer foto que siga os quatro cuidados da tela anterior.
+                </p>
+              </Card>
+
+              <div className="flex-1" />
+
+              <div className="space-y-3 mt-6">
+                <PickFromGallery
+                  onPicked={async (canvas) => {
+                    const q = assessQuality(canvas);
+                    const url = await compressImage(canvas);
+                    handleCaptured(url, null, q);
+                  }}
+                />
+
+                {/* A foto simulada é material de DEMONSTRAÇÃO. Fora do modo demo
+                    não aparece: registro inventado no histórico, no índice e no
+                    relatório de uma mãe é pior do que não ter registro. */}
+                {DEMO_MODE && (
+                  <Button
+                    size="lg"
+                    fullWidth
+                    variant="ghost"
+                    onClick={() => {
+                      const pts = suggestReferencePoints(FALLBACK_BOX);
+                      handleCaptured(simulatedPhoto(pts), FALLBACK_BOX, {
+                        ok: true,
+                        sharpness: 1,
+                        brightness: 0.55,
+                        problem: null,
+                        hint: null,
+                      });
+                    }}
+                  >
+                    <Wand2 size={18} />
+                    Usar foto simulada (demo)
+                  </Button>
+                )}
+
+                <Button variant="ghost" fullWidth onClick={() => setPhase('checklist')}>
+                  Voltar
+                </Button>
+              </div>
+            </div>
           )}
 
           {phase === 'error' && quality && (
@@ -405,8 +479,7 @@ export function Capture() {
                 </Button>
               </div>
             ))}
-        </motion.div>
-      </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -414,6 +487,7 @@ export function Capture() {
 const PHASE_LABEL: Record<Phase, string> = {
   checklist: 'Antes de começar',
   camera: 'Enquadre a cabecinha',
+  'sem-camera': 'Escolha uma foto',
   error: 'Precisamos de outra foto',
   compare: 'Confira o alinhamento',
   points: 'Ajuste os pontos',
@@ -423,16 +497,61 @@ const PHASE_LABEL: Record<Phase, string> = {
 
 /* ─────────────────────────── câmera ─────────────────────────── */
 
+/**
+ * Escolher uma foto já tirada. É a saída honesta quando a câmera não abre —
+ * e a câmera não abrir é comum no público deste app: permissão negada,
+ * navegador embutido do Instagram/Facebook (por onde chega o anúncio) e
+ * desktop sem webcam.
+ */
+function PickFromGallery({
+  onPicked,
+  label = 'Escolher foto da galeria',
+}: {
+  onPicked: (canvas: HTMLCanvasElement) => void;
+  label?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          setErro(null);
+          try {
+            onPicked(await canvasFromFile(file));
+          } catch {
+            setErro('Não consegui abrir essa imagem. Tente outra foto.');
+          }
+        }}
+      />
+      <Button size="lg" fullWidth onClick={() => inputRef.current?.click()}>
+        <ImagePlus size={18} />
+        {label}
+      </Button>
+      {erro && <p className="text-14 text-terra-ink text-center">{erro}</p>}
+    </>
+  );
+}
+
 function CameraView({
   onCaptured,
+  onDenied,
   babyName,
 }: {
   onCaptured: (dataUrl: string, box: Box | null, q: QualityReport) => void;
+  onDenied: () => void;
   babyName: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
-  const [denied, setDenied] = useState(false);
   const [box, setBox] = useState<Box | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -468,7 +587,7 @@ function CameraView({
         };
         if (supportsFaceDetection()) loop();
       } catch {
-        setDenied(true);
+        onDenied();
       }
     })();
 
@@ -506,47 +625,6 @@ function CameraView({
     setBusy(false);
     onCaptured(url, box, q);
   };
-
-  // Sem câmera (desktop, permissão negada) o produto não pode simplesmente
-  // morrer — em demo/apresentação é justamente aqui que ele seria mostrado.
-  if (denied) {
-    return (
-      <div className="flex-1 flex flex-col px-5 pb-8">
-        <Card tone="sky" className="text-center">
-          <span className="inline-grid place-items-center w-12 h-12 rounded-pill bg-sky/25 text-sky-ink mb-3">
-            <Camera size={20} />
-          </span>
-          <h2 className="text-20 text-sky-ink mb-2">Sem acesso à câmera</h2>
-          <p className="text-14 text-sky-ink/85 leading-relaxed">
-            Libere a câmera nas permissões do navegador — ou siga com uma foto simulada, se você só
-            está conhecendo o app.
-          </p>
-        </Card>
-
-        <div className="flex-1" />
-
-        <Button
-          size="lg"
-          fullWidth
-          variant="secondary"
-          className="mt-6"
-          onClick={() => {
-            const pts = suggestReferencePoints(FALLBACK_BOX);
-            onCaptured(simulatedPhoto(pts), FALLBACK_BOX, {
-              ok: true,
-              sharpness: 1,
-              brightness: 0.55,
-              problem: null,
-              hint: null,
-            });
-          }}
-        >
-          <Wand2 size={18} />
-          Usar foto simulada (demo)
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <div className="flex-1 flex flex-col">
@@ -741,15 +819,21 @@ function AngleCapture({
           </span>
           <h2 className="text-20 text-sky-ink mb-2">Sem acesso à câmera</h2>
           <p className="text-14 text-sky-ink/85 leading-relaxed">
-            Libere a câmera nas permissões — ou use uma foto simulada, se está só conhecendo o app.
+            Libere a câmera nas permissões, ou escolha uma foto que já tirou deste ângulo.
           </p>
         </Card>
         <div className="flex-1" />
         <div className="space-y-3 mt-6">
-          <Button size="lg" fullWidth variant="secondary" onClick={() => onDone(simulatedAngle(angle))}>
-            <Wand2 size={18} />
-            Usar foto simulada (demo)
-          </Button>
+          <PickFromGallery
+            onPicked={async (canvas) => onDone(await compressImage(canvas))}
+          />
+
+          {DEMO_MODE && (
+            <Button size="lg" fullWidth variant="ghost" onClick={() => onDone(simulatedAngle(angle))}>
+              <Wand2 size={18} />
+              Usar foto simulada (demo)
+            </Button>
+          )}
           <Button variant="ghost" fullWidth onClick={onSkip ?? onCancel}>
             {onSkip ? 'Pular este ângulo' : 'Cancelar'}
           </Button>
