@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { matchRoutes, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './store/app';
 import { TabBar } from './components/TabBar';
+import { AvisoDeSalvamento } from './components/AvisoDeSalvamento';
 import { Onboarding } from './screens/Onboarding';
 import { Home } from './screens/Home';
 import { Capture } from './screens/Capture';
@@ -74,6 +75,10 @@ export function App() {
   return (
     <div className="min-h-dvh bg-canvas">
       <div className="mx-auto w-full max-w-[520px] min-h-dvh relative">
+        {/* Fora do AnimatePresence de propósito: o aviso não pode piscar a cada
+            troca de tela, e precisa aparecer em QUALQUER rota. */}
+        {!immersive && <AvisoDeSalvamento />}
+
         <AnimatePresence mode="wait" initial={false}>
           <motion.main
             key={location.pathname.split('/')[1] || 'home'}

@@ -104,6 +104,8 @@ interface AppContextValue {
   state: AppState;
   /** true quando nem o IndexedDB nem o localStorage aceitaram gravar. */
   falhaAoSalvar: boolean;
+  /** Salvou no aparelho mas ainda não chegou na conta do cliente. */
+  falhaAoSincronizar: boolean;
   derived: Derived;
   // ações
   completeOnboarding: (p: {
@@ -156,6 +158,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // para o onboarding.
   const [hidratado, setHidratado] = useState(false);
   const [falhaAoSalvar, setFalhaAoSalvar] = useState(false);
+  const [falhaAoSincronizar, setFalhaAoSincronizar] = useState(false);
+  // Sobe quando uma tentativa falha, para reagendar a próxima.
+  const [tentativaNuvem, setTentativaNuvem] = useState(0);
 
   useEffect(() => {
     let cancelado = false;
@@ -207,9 +212,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!userId) return;
     // A nuvem espera a digitação parar. Sem isso, cada tecla no campo de nota
     // viraria uma gravação — e um upload de foto junto.
-    const janela = setTimeout(() => void subirEstado(userId, state), 1200);
+    // O resultado do envio PRECISA ser lido. Enquanto era `void subirEstado(...)`,
+    // uma falha de rede, de sessão expirada ou de upload de foto passava em
+    // silêncio: a mãe via a foto na tela achando que estava na conta dela,
+    // quando na verdade só existia no IndexedDB daquele aparelho.
+    const janela = setTimeout(() => {
+      void subirEstado(userId, state).then((ok) => setFalhaAoSincronizar(!ok));
+    }, 1200);
     return () => clearTimeout(janela);
-  }, [state, hidratado, userId]);
+  }, [state, hidratado, userId, tentativaNuvem]);
+
+  // Retentativa enquanto não subir. Rede de celular cai o tempo todo — desistir
+  // na primeira falha deixaria a semana registrada só no aparelho.
+  useEffect(() => {
+    if (!falhaAoSincronizar || !userId) return;
+    const t = setTimeout(() => setTentativaNuvem((n) => n + 1), 20_000);
+    return () => clearTimeout(t);
+  }, [falhaAoSincronizar, userId]);
 
   const track = useCallback((event: AnalyticsEvent, meta?: Record<string, unknown>) => {
     setState((s) => ({
@@ -440,6 +459,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       state,
       derived,
       falhaAoSalvar,
+      falhaAoSincronizar,
       completeOnboarding,
       addEntry,
       updateNotificationPrefs,
