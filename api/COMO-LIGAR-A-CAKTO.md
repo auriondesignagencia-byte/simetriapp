@@ -7,14 +7,13 @@ o e-mail à mão em `acessos_liberados`. Este endpoint acaba com isso.
 O endereço **já está no ar e protegido por um token**. Falta uma coisa só: a
 chave do Supabase que dá permissão de escrever na tabela.
 
-> 🔑 **O token não está escrito aqui de propósito** — ele é a própria senha do
-> webhook e este arquivo vai para o git. Para vê-lo:
-> ```bash
-> cd /Users/eduardomendes/Projetos/em-andamento/simetriapp
-> vercel env pull .env.producao --environment production --scope auriondesignagencia-bytes-projects
-> grep CAKTO_WEBHOOK_SECRET .env.producao
-> rm .env.producao      # apague depois de copiar
-> ```
+> 🔑 **O token não está escrito aqui** — este arquivo vai para o git.
+> Ele está em **`.env.webhook.local`**, na raiz deste projeto, que o git ignora.
+> Lá dentro tem a linha `WEBHOOK_URL=` com a URL pronta para colar na Cakto.
+>
+> ⚠️ **`vercel env pull` NÃO serve para recuperar o token** — a Vercel esconde
+> variáveis sensíveis e devolve valor vazio. Se `.env.webhook.local` se perder,
+> gere um token novo e regrave com `vercel env add CAKTO_WEBHOOK_SECRET production`.
 
 ---
 

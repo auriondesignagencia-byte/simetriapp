@@ -18,6 +18,23 @@
  * arquivo faz no Supabase é inserir/remover uma linha de `acessos_liberados`.
  */
 
+/**
+ * Confirmado no painel da Cakto em 10/09/2026 — o payload real é:
+ *
+ *   { "secret": "<uuid>",
+ *     "event": "purchase_approved",
+ *     "data": [ { "id": ..., "refId": ...,
+ *                 "customer": { "name": ..., "email": ..., "phone": ... } } ] }
+ *
+ * Repare que `data` é um ARRAY (modo de disparo "Agrupado": um evento por
+ * venda, com todos os itens). A busca recursiva abaixo atravessa arrays porque
+ * `Object.values` de um array devolve os elementos.
+ *
+ * Eventos que a Cakto oferece: Boleto gerado, Pix gerado, Compra aprovada,
+ * Compra recusada, Reembolso, Chargeback, Assinatura criada/cancelada/renovada,
+ * Abandono de Checkout, PicPay gerado, Nubank gerado.
+ * Assinados neste webhook: **Compra aprovada, Reembolso, Chargeback**.
+ */
 const APROVACAO = [
   'aprovad', 'approved', 'paid', 'pago', 'pagamento_aprovado', 'purchase_approved',
   'compra_aprovada', 'venda_aprovada', 'completed', 'concluid', 'authorized',
@@ -176,11 +193,16 @@ export default async function handler(req, res) {
   }
 
   if (aprovou) {
-    // merge-duplicates: a Cakto reenvia o webhook quando não recebe 2xx, e o
-    // mesmo comprador pode chegar várias vezes. Reenvio não pode dar erro.
+    // ignore-duplicates, NÃO merge-duplicates. A Cakto reenvia o webhook quando
+    // não recebe 2xx e o mesmo comprador pode chegar várias vezes, então o
+    // reenvio não pode dar erro — mas `merge` vira ON CONFLICT DO UPDATE e passa
+    // a exigir permissão de UPDATE na tabela. `ignore` vira DO NOTHING e se
+    // basta com INSERT. Menos privilégio para o mesmo resultado: quem já está
+    // liberado continua liberado. (Medido em 10/09: com merge, o SimetriApp
+    // devolvia 42501 pedindo GRANT UPDATE.)
     const r = await supabase('acessos_liberados', {
       method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
       body: JSON.stringify({ email, nota: `Cakto ${new Date().toISOString().slice(0, 10)}` }),
     });
     if (!r.ok) {

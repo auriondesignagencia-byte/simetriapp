@@ -117,3 +117,9 @@ create policy "dono apaga as próprias fotos"
 --   delete from public.acessos_liberados where email = 'cliente@exemplo.com';
 --   (o login para de funcionar e os dados deixam de ser lidos; nada é apagado)
 -- ============================================================================
+
+-- O webhook da Cakto entra pelo servidor com a chave `service_role`. Ela ignora
+-- RLS mas NÃO ignora GRANT de tabela — e num projeto criado com "expor novas
+-- tabelas automaticamente" DESLIGADO os privilégios padrão não são concedidos.
+-- Sem esta linha o webhook recebe 42501 e ninguém é liberado.
+grant select, insert, delete on public.acessos_liberados to service_role;
