@@ -27,3 +27,6 @@ yarn-error.log*
 coverage/
 .vite/
 .vercel
+
+# Cópia local das variáveis de produção (contém segredos)
+.env.producao
