@@ -1,11 +1,22 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, MailCheck } from 'lucide-react';
+import { Mail, MailCheck, MessageCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
 import { supabase } from '@/lib/supabase';
+
+/**
+ * Saída de emergência da tela de entrada — o mesmo número que já atende na
+ * landing. Existe porque dois erros desta tela deixam um cliente que PAGOU sem
+ * ter a quem recorrer: o e-mail ainda não liberado (a liberação é manual hoje)
+ * e o teto de envio de e-mail do Supabase, que estoura quando várias pessoas
+ * compram na mesma hora. Deixe em branco para esconder o botão.
+ */
+const SUPORTE_WHATSAPP =
+  'https://wa.me/5532984865656?text=' +
+  encodeURIComponent('Olá! Comprei o SimetriApp e não estou conseguindo entrar no app.');
 
 /**
  * Entrada por link no e-mail. Sem senha para criar, esquecer ou recuperar — e o
@@ -19,6 +30,7 @@ export function Entrar() {
   const [email, setEmail] = useState('');
   const [estado, setEstado] = useState<'form' | 'enviando' | 'enviado'>('form');
   const [erro, setErro] = useState<string | null>(null);
+  const [ofereceSuporte, setOfereceSuporte] = useState(false);
 
   const enviar = async (evento: React.FormEvent) => {
     evento.preventDefault();
@@ -32,6 +44,7 @@ export function Entrar() {
 
     setEstado('enviando');
     setErro(null);
+    setOfereceSuporte(false);
 
     const { data: liberado, error: erroChecagem } = await supabase.rpc('email_liberado', {
       endereco,
@@ -40,14 +53,17 @@ export function Entrar() {
     if (erroChecagem) {
       setEstado('form');
       setErro('Não conseguimos verificar agora. Tente de novo em instantes.');
+      setOfereceSuporte(true);
       return;
     }
 
     if (!liberado) {
       setEstado('form');
+      // Erro que um comprador LEGÍTIMO vê enquanto o acesso não foi liberado.
       setErro(
-        'Não encontramos uma compra com esse e-mail. Use o mesmo endereço que você usou para comprar, ou fale com a gente.',
+        'Não encontramos uma compra com esse e-mail. Confira se é o mesmo que você usou no pagamento — se for, o acesso pode ainda não ter sido liberado.',
       );
+      setOfereceSuporte(true);
       return;
     }
 
@@ -58,7 +74,18 @@ export function Entrar() {
 
     if (error) {
       setEstado('form');
-      setErro('Não conseguimos enviar o link agora. Tente de novo em instantes.');
+      // O teto de e-mail do Supabase é do PROJETO, não por destinatário, e
+      // devolve 429. "Tente de novo" faz parecer defeito do app, e o cliente
+      // insiste — o que só piora o bloqueio.
+      const limite =
+        (error as { status?: number }).status === 429 ||
+        /rate|limit|too many/i.test(error.message ?? '');
+      setErro(
+        limite
+          ? 'Muitos links foram pedidos agora há pouco. Espere uns minutos e tente de novo — ou fale com a gente que a gente resolve na hora.'
+          : 'Não conseguimos enviar o link agora. Tente de novo em instantes.',
+      );
+      setOfereceSuporte(true);
       return;
     }
 
@@ -136,6 +163,18 @@ export function Entrar() {
           >
             {estado === 'enviando' ? 'Enviando…' : 'Receber meu link'}
           </Button>
+
+          {ofereceSuporte && SUPORTE_WHATSAPP && (
+            <a
+              href={SUPORTE_WHATSAPP}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 flex items-center justify-center gap-2 w-full rounded-pill border border-line px-4 py-3 text-14 font-medium text-ink hover:bg-raised transition-colors"
+            >
+              <MessageCircle size={16} />
+              Falar com a gente no WhatsApp
+            </a>
+          )}
         </Card>
       </motion.form>
     </div>
