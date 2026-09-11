@@ -5,7 +5,7 @@ import { Mail, MailCheck, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
-import { supabase } from '@/lib/supabase';
+import { ERRO_DO_LINK, supabase } from '@/lib/supabase';
 
 /**
  * Saída de emergência da tela de entrada — o mesmo número que já atende na
@@ -29,8 +29,11 @@ const SUPORTE_WHATSAPP =
 export function Entrar() {
   const [email, setEmail] = useState('');
   const [estado, setEstado] = useState<'form' | 'enviando' | 'enviado'>('form');
-  const [erro, setErro] = useState<string | null>(null);
-  const [ofereceSuporte, setOfereceSuporte] = useState(false);
+  // Quando a pessoa chega aqui vinda de um link que falhou, a tela já abre
+  // dizendo o porquê. Sem isso ela vê a mesma tela de antes e conclui que o
+  // app simplesmente não funciona.
+  const [erro, setErro] = useState<string | null>(ERRO_DO_LINK);
+  const [ofereceSuporte, setOfereceSuporte] = useState(Boolean(ERRO_DO_LINK));
 
   const enviar = async (evento: React.FormEvent) => {
     evento.preventDefault();
@@ -104,6 +107,10 @@ export function Entrar() {
             <p className="text-14 text-sky-ink/85 leading-relaxed">
               Abra o e-mail que acabamos de mandar para <strong>{email.trim()}</strong> e toque no
               link para entrar. Ele vale por uma hora.
+            </p>
+            <p className="text-12 text-sky-ink/70 leading-relaxed mt-2">
+              Se chegar mais de um e-mail, abra sempre o mais recente: pedir um link novo
+              cancela o anterior.
             </p>
             <Button
               variant="secondary"
