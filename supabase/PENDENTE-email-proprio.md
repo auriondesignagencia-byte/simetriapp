@@ -1,33 +1,37 @@
-# O e-mail do login precisa sair do Supabase (bloqueia a venda)
+# E-mail do login — CONFIGURADO em 11/09/2026 ✅
 
-O serviço de e-mail embutido do Supabase manda **2 e-mails por hora — no projeto
-inteiro, não por pessoa**. Estourou hoje (11/09) no seu próprio teste, com uma
-pessoa só usando. Com anúncio no ar, a terceira mãe que comprar na mesma hora
-não recebe link nenhum e vê *"Muitos links foram pedidos agora há pouco"* logo
-depois de pagar.
+> Este arquivo era a pendência que bloqueava a venda. **Está resolvida.** Fica
+> como registro do que foi feito e do que ainda pode melhorar.
 
-Não dá para levantar esse teto no painel enquanto o SMTP for o embutido: o campo
-de rate limit só passa a aceitar número maior **depois** que existe SMTP próprio.
+## O que está valendo hoje
+
+| | |
+|---|---|
+| Envio | SMTP próprio: **Gmail do Eduardo** (`smtp.gmail.com`, porta 465) |
+| Remetente | **SimetriApp** `<eduardosmendes21@gmail.com>` |
+| Teto | **100 e-mails/hora** (era 2) |
+| E-mail | Em **português**, com botão dourado e o WhatsApp do suporte |
+
+Verificado na hora: dois envios seguidos responderam `200` — antes, o segundo
+sempre dava `429`.
+
+⚠️ **A senha de app passou por uma conversa de chat.** Quando der, apague em
+`myaccount.google.com/apppasswords`, gere outra e troque só o campo Senha no
+Supabase. Nada mais muda.
+
+⚠️ **Falta fazer o MESMO no projeto do Baby Calm** — ele continua com o teto de
+2/hora e o e-mail em inglês.
+
+## O que ainda melhora (não urgente)
+
+O painel avisa que o Gmail é "para e-mail pessoal, não transacional": a entrega
+funciona, mas em volume alto cai mais em spam, e o remetente é um `@gmail.com`.
+Quando existir domínio próprio (`simetriapp.com.br`), migrar para o **Resend**
+com algo como `acesso@simetriapp.com.br` — 3.000/mês de graça.
 
 ---
 
-## Destravar AGORA (enquanto o teto está estourado)
-
-Gera o link de entrada direto, sem passar pelo e-mail — não consome o teto:
-
-```bash
-cd ~/Projetos/em-andamento/simetriapp
-echo 'SUPABASE_SERVICE_ROLE_KEY=cole_a_chave_aqui' >> .env.webhook.local
-node tools/link-de-entrada.mjs eduardosmendes21@gmail.com
-```
-
-A chave está em **Supabase → Project Settings → API Keys → `service_role`**.
-O arquivo `.env.webhook.local` é ignorado pelo git.
-
-Serve para o atendimento também: cliente que não recebeu o e-mail (spam, teto,
-e-mail errado), você gera o link e manda no WhatsApp. Vale 1 hora, uma vez só.
-
----
+# Como foi feito (referência)
 
 ## Passo 1 — SMTP próprio (a senha é o Dr. Diego que gera)
 
