@@ -29,23 +29,47 @@ e-mail errado), você gera o link e manda no WhatsApp. Vale 1 hora, uma vez só.
 
 ---
 
-## Passo 1 — SMTP próprio (10 min, sem domínio)
+## Passo 1 — SMTP próprio (a senha é o Dr. Diego que gera)
 
-Para a fase de validação, o Gmail resolve: 500 e-mails/dia, nenhuma configuração
-de DNS.
+**Decidido em 11/09: o remetente é o e-mail do Dr. Diego.** Ele é quem vende e
+quem a cliente reconhece — o e-mail chega minutos depois de ela pagar, então o
+remetente ser um desconhecido custa cliques.
 
-1. Na conta Google do envio: **Segurança → Verificação em duas etapas** ligada →
-   **Senhas de app** → gerar uma para "SimetriApp".
-2. Supabase → **Authentication → Emails → SMTP Settings** → **Enable Custom SMTP**:
-   - Host `smtp.gmail.com` · Port `465` · User: o e-mail · Password: a senha de app
-   - Sender email: o mesmo e-mail · **Sender name: `SimetriApp`**
-3. Logo abaixo, **Rate Limits → emails per hour**: subir de 2 para **100**.
+⚠️ **Descoberto no painel em 11/09: o template do e-mail SÓ fica editável depois
+que o SMTP próprio estiver ligado.** ("Set up custom SMTP to edit templates".)
+Ou seja, o Passo 2 depende deste. Não dá para fazer na ordem inversa.
 
-Quando existir domínio próprio (ex.: `simetriapp.com.br`), trocar para o
-**Resend** — 3.000 e-mails/mês de graça e remetente com a cara do produto. O
-Gmail entrega bem, mas o remetente é pessoal.
+### O que o Dr. Diego precisa fazer (mandar isto para ele)
 
----
+1. Entrar em **myaccount.google.com** com o e-mail dele.
+2. **Segurança** → ligar a **Verificação em duas etapas**, se não estiver ligada
+   (sem ela o Google não deixa criar a senha do passo seguinte).
+3. Na busca do topo, procurar **"Senhas de app"** → criar uma com o nome
+   `SimetriApp`.
+4. O Google mostra **16 letras** em quatro blocos. Mandar para o Eduardo — vale
+   só para este uso e pode ser apagada a qualquer momento no mesmo lugar.
+
+> Se a conta dele for Google Workspace da empresa, o administrador pode ter
+> bloqueado senhas de app. Nesse caso o caminho é o **Resend** com domínio
+> próprio.
+
+### O que o Eduardo preenche
+
+Supabase → projeto `simetriapp` → **Authentication → Emails → SMTP Settings** →
+liga **Enable custom SMTP**:
+
+| Campo | Valor |
+|---|---|
+| Sender email | o e-mail do Dr. Diego |
+| **Sender name** | **SimetriApp** |
+| Host | `smtp.gmail.com` |
+| Port | `465` |
+| Username | o mesmo e-mail do Dr. Diego |
+| Password | as 16 letras da senha de app (sem espaços) |
+
+Depois, em **Rate Limits → emails per hour**: subir de **2 para 100**.
+
+Repetir tudo no projeto do **Baby Calm**, que tem o mesmo teto.
 
 ## Passo 2 — o e-mail está EM INGLÊS
 
