@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 /**
  * Webhook da Cakto → libera o acesso do comprador automaticamente.
  *
@@ -132,6 +134,117 @@ async function supabase(caminho, opcoes) {
   });
 }
 
+/**
+ * ═══ Conversions API da Meta: a compra, mandada do SERVIDOR ═══
+ *
+ * POR QUE ISTO EXISTE
+ * O pixel no navegador só dispara a compra se a pessoa CHEGAR numa página de
+ * aprovado. No Pix ela sai do navegador, paga no app do banco e muitas vezes
+ * não volta — então o evento simplesmente não acontece. Medido em 14/09: a
+ * compra por Pix liberou o acesso normalmente e a Meta não registrou nada.
+ *
+ * Aqui o evento sai daqui, do momento em que a Cakto CONFIRMA o pagamento.
+ * Não depende de navegador aberto, de cookie nem de bloqueador de anúncio.
+ *
+ * DESLIGADO por padrão: sem META_PIXEL_ID e META_CAPI_TOKEN no ambiente, a
+ * função não faz nada e o webhook segue igual. Falha aqui NUNCA derruba a
+ * liberação de acesso — quem pagou entra no app mesmo que a Meta esteja fora.
+ */
+const sha256 = (txt) => crypto.createHash('sha256').update(String(txt).trim().toLowerCase()).digest('hex');
+
+/** Procura o valor pago no payload, sem depender do nome exato do campo. */
+function acharValor(obj, profundidade = 0) {
+  if (!obj || typeof obj !== 'object' || profundidade > 6) return null;
+  for (const [chave, valor] of Object.entries(obj)) {
+    if (!/amount|valor|total|price|preco|pre_o/i.test(chave)) continue;
+    const n = typeof valor === 'number' ? valor : parseFloat(String(valor).replace(',', '.'));
+    // Centavos: plataforma nenhuma cobra R$ 4.990,00 por app de bebê.
+    if (Number.isFinite(n) && n > 0) return n > 1000 ? n / 100 : n;
+  }
+  for (const valor of Object.values(obj)) {
+    const achado = acharValor(valor, profundidade + 1);
+    if (achado) return achado;
+  }
+  return null;
+}
+
+/**
+ * Identificador do pedido — é o que evita contar a mesma compra duas vezes.
+ *
+ * A ordem das chaves é deliberada e foi o que um teste pegou: o payload da
+ * Cakto traz `id: 99` (um número interno, pequeno, que pode repetir entre
+ * produtos) ANTES de `refId: '5TPgzUM'`, que é o código do pedido mostrado ao
+ * comprador e no painel. Varrendo na ordem do objeto, vinha o `id` — e dois
+ * pedidos diferentes com o mesmo `id` seriam tratados como a mesma compra pela
+ * Meta, sumindo com uma venda do relatório. Por isso `id` é o ÚLTIMO recurso.
+ */
+function acharPedido(obj, profundidade = 0) {
+  const preferencia = [/^refid$/i, /^(order_?id|transaction_?id|codigo|code)$/i, /^ref$/i, /^id$/i];
+
+  const varrer = (o, teste, prof = 0) => {
+    if (!o || typeof o !== 'object' || prof > 6) return null;
+    for (const [chave, valor] of Object.entries(o)) {
+      if (teste.test(chave) && (typeof valor === 'string' || typeof valor === 'number')) {
+        return String(valor);
+      }
+    }
+    for (const valor of Object.values(o)) {
+      const achado = varrer(valor, teste, prof + 1);
+      if (achado) return achado;
+    }
+    return null;
+  };
+
+  for (const teste of preferencia) {
+    const achado = varrer(obj, teste, profundidade);
+    if (achado) return achado;
+  }
+  return null;
+}
+
+async function avisarMeta({ email, valor, pedido }) {
+  const pixel = process.env.META_PIXEL_ID;
+  const token = process.env.META_CAPI_TOKEN;
+  if (!pixel || !token) return { enviado: false, motivo: 'sem META_PIXEL_ID/META_CAPI_TOKEN' };
+
+  const evento = {
+    event_name: 'Purchase',
+    event_time: Math.floor(Date.now() / 1000),
+    action_source: 'website',
+    event_source_url: process.env.META_EVENT_SOURCE_URL || 'https://landing-bebe.vercel.app/',
+    // Mesmo pedido = mesmo id. A Cakto REENVIA o webhook quando não recebe 2xx,
+    // e sem isto cada reenvio viraria outra compra no relatório.
+    ...(pedido ? { event_id: `cakto_${pedido}` } : {}),
+    // O e-mail vai embaralhado (sha256). A Meta casa a pessoa sem nunca receber
+    // o endereço — é o que a política dela exige e o que é decente fazer com o
+    // dado de quem comprou.
+    user_data: { em: [sha256(email)] },
+    custom_data: { currency: 'BRL', ...(valor ? { value: valor } : {}) },
+  };
+
+  try {
+    const r = await fetch(`https://graph.facebook.com/v21.0/${pixel}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: [evento],
+        access_token: token,
+        ...(process.env.META_TEST_EVENT_CODE ? { test_event_code: process.env.META_TEST_EVENT_CODE } : {}),
+      }),
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('[meta] recusou:', r.status, JSON.stringify(corpo).slice(0, 300));
+      return { enviado: false, motivo: `http ${r.status}` };
+    }
+    console.log('[meta] compra enviada', JSON.stringify({ recebidos: corpo.events_received ?? null, pedido }));
+    return { enviado: true };
+  } catch (erro) {
+    console.error('[meta] falhou:', String(erro).slice(0, 200));
+    return { enviado: false, motivo: 'excecao' };
+  }
+}
+
 export default async function handler(req, res) {
   const esperado = process.env.CAKTO_WEBHOOK_SECRET;
   const recebido = String(req.query?.token ?? '');
@@ -210,7 +323,17 @@ export default async function handler(req, res) {
       return res.status(500).json({ erro: 'falha ao liberar' });
     }
     console.log('[cakto] acesso liberado');
-    return res.status(200).json({ ok: true, acao: 'liberado' });
+
+    // Depois de liberar, nunca antes: se a Meta estiver fora do ar, quem pagou
+    // já entrou no app. O await é de propósito — a função serverless morre no
+    // return e um envio solto seria cortado no meio.
+    const meta = await avisarMeta({
+      email,
+      valor: acharValor(corpo),
+      pedido: acharPedido(corpo),
+    });
+
+    return res.status(200).json({ ok: true, acao: 'liberado', meta: meta.enviado });
   }
 
   const r = await supabase(`acessos_liberados?email=eq.${encodeURIComponent(email)}`, {
